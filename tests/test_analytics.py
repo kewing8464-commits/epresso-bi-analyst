@@ -201,3 +201,10 @@ def test_satisfaction_tool_reports_missing_and_causation(model):
 def test_coverage_lists_what_is_missing(model):
     r = an.get_data_coverage(model)
     assert any('profit' in x for x in r.value['not_in_the_data'])
+
+
+def test_grain_table_counts_rows_and_duplicate_keys(model):
+    g = an.grain_table(model).set_index('table')
+    assert g.loc['sales', 'rows'] == 6 and g.loc['sales', 'duplicate keys'] == 0
+    assert bool(g.loc['sales', 'contains revenue?']) and not bool(g.loc['stores', 'contains revenue?'])
+    assert g.loc['survey', 'rows'] == 4

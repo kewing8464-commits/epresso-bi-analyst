@@ -57,6 +57,9 @@ GRAIN = {
               'from the annual market survey.',
 }
 
+KEYS = {'sales': 'Sales ID', 'stores': 'ID', 'categories': 'Category ID', 'products': 'Product ID',
+        'survey': 'Survey ID (= Store ID + year)'}
+
 # Things a manager might ask about that this data does not contain.
 NOT_IN_DATA = [
     'costs, expenses, or cost of goods sold',
@@ -131,6 +134,21 @@ def identify_table(raw: pd.DataFrame, max_scan: int = 15):
     return None, None
 
 
+def near_miss(raw: pd.DataFrame, max_scan: int = 15):
+    """A sheet that has most, but not all, of a table's required columns.
+    Returns (kind, [missing column names]) or (None, [])."""
+    best = (None, [], 0.0)
+    for i in range(min(max_scan, len(raw))):
+        cells = {_norm(v) for v in raw.iloc[i].tolist() if v is not None and str(v).strip()}
+        for kind, spec in TABLE_SPECS.items():
+            req = spec['required']
+            hit = [c for c in req if _norm(c) in cells]
+            frac = len(hit) / len(req)
+            if len(hit) >= 2 and frac >= 0.5 and frac > best[2]:
+                best = (kind, [c for c in req if _norm(c) not in cells], frac)
+    return best[0], best[1]
+
+
 def extract_table(raw: pd.DataFrame, kind: str, header_row: int) -> pd.DataFrame:
     """Cut the table out below its header row and rename columns to canonical names."""
     spec = TABLE_SPECS[kind]
@@ -158,8 +176,15 @@ def load_files(files: list[tuple[str, bytes]]):
         for source, raw in sheets.items():
             kind, header_row = identify_table(raw)
             if kind is None:
-                log.append({'source': source, 'table': None, 'rows': len(raw),
-                            'note': 'Not an E-Presso data table (ignored).'})
+                guess, missing = near_miss(raw)
+                if guess:
+                    log.append({'source': source, 'table': None, 'rows': len(raw),
+                                'note': f'Looks like the {guess} table but is missing required '
+                                        f'column(s): {", ".join(missing)}. Not loaded.',
+                                'near_miss': guess, 'missing_columns': missing})
+                else:
+                    log.append({'source': source, 'table': None, 'rows': len(raw),
+                                'note': 'Not an E-Presso data table (ignored).'})
                 continue
             table = extract_table(raw, kind, header_row)
             note = f'Header found in row {header_row + 1}.'
@@ -168,6 +193,30 @@ def load_files(files: list[tuple[str, bytes]]):
             tables[kind] = table
             log.append({'source': source, 'table': kind, 'rows': len(table), 'note': note})
     return tables, log
+
+
+def grain_table(model: 'Model') -> pd.DataFrame:
+    """One row per source table: where it came from, what a row means, its key, size,
+    and whether it holds revenue. Built from the loaded data, not typed in."""
+    sources = {e['table']: e['source'] for e in model.file_log if e.get('table')}
+    frames = {'sales': model.sales, 'stores': model.stores, 'categories': model.categories,
+              'products': model.products, 'survey': model.survey}
+    rows = []
+    for kind, df in frames.items():
+        if df is None:
+            rows.append({'table': kind, 'source file / sheet': 'not uploaded', 'one row =': GRAIN[kind],
+                         'key column(s)': KEYS[kind], 'rows': 0, 'contains revenue?': kind == 'sales',
+                         'duplicate keys': None})
+            continue
+        if kind == 'survey':
+            dupes = int(df.duplicated(subset=['Store ID', 'Year']).sum())
+        else:
+            dupes = int(df[KEYS[kind]].duplicated().sum())
+        rows.append({'table': kind, 'source file / sheet': sources.get(kind, ''),
+                     'one row =': GRAIN[kind], 'key column(s)': KEYS[kind],
+                     'rows': model.raw_sales_rows if kind == 'sales' else len(df),
+                     'contains revenue?': kind == 'sales', 'duplicate keys': dupes})
+    return pd.DataFrame(rows)
 
 
 def profile_table(df: pd.DataFrame) -> dict:
@@ -296,6 +345,11 @@ def build_model(tables: dict, file_log: list | None = None) -> Model:
     """Type every column, check the data, and join lookups onto sales without changing
     the sales row count or the revenue total (each join is verified)."""
     if 'sales' not in tables:
+        for entry in file_log or []:
+            if entry.get('near_miss') == 'sales':
+                raise ValueError(f'The Sales table in {entry["source"]} is missing required '
+                                 f'column(s): {", ".join(entry["missing_columns"])}. The app needs '
+                                 'Sales ID, Date, Store ID, Category ID, Product ID and Revenue.')
         raise ValueError('No Sales table found. Upload the file that contains Sales ID, Date, '
                          'Store ID, Category ID, Product ID and Revenue.')
     issues: list = []
@@ -517,6 +571,14 @@ def build_model(tables: dict, file_log: list | None = None) -> Model:
                        len(unknown), unknown)
         survey = sv
 
+    if survey is not None:
+        # Prove the survey join is safe: revenue at store-year grain, before and after the join.
+        rev_sy = s.groupby(['Store ID', 'Year'], as_index=False)['Revenue'].sum()
+        sv_key = survey[['Store ID', 'Year', 'Satisfaction']].dropna(subset=['Store ID', 'Year']).copy()
+        sv_key['Year'] = sv_key['Year'].astype(int)
+        _, rep = check_merge(rev_sy, sv_key, on=['Store ID', 'Year'], value_col='Revenue')
+        merges.append({'join': 'Store-year revenue -> Survey[Store ID + Year] (one-to-one)', **rep})
+
     missing_tables = [k for k in TABLE_SPECS if k not in tables]
     return Model(sales=s.reset_index(drop=True), stores=stores, categories=cats, products=prods,
                  survey=survey, raw_sales_rows=raw_rows, issues=issues, merges=merges,
@@ -546,7 +608,7 @@ class Filters:
 
     def describe(self) -> str:
         if self.is_empty():
-            return 'All data (no filters)'
+            return 'All stores, all years (no filters)'
         parts = []
         for f in fields(self):
             vals = getattr(self, f.name)
@@ -578,7 +640,8 @@ def resolve_store(model: Model, token: str):
         return ([token.upper()], None) if token.upper() in ids else ([], f'Unknown store {token}')
     st = model.stores
     t = token.strip().lower()
-    if t.upper() in set(st['ID']):
+    # A store can appear in updated sales data before it is added to the stores file.
+    if t.upper() in set(st['ID']) | set(model.sales['Store ID'].dropna()):
         return [t.upper()], None
     if t in ('website', 'web', 'online'):
         return st.loc[st['Channel'] == WEBSITE, 'ID'].tolist(), None
