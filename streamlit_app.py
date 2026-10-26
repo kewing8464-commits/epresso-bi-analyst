@@ -110,6 +110,9 @@ with st.sidebar:
     st.success(f'Loaded: {", ".join(loaded)}')
     if model.missing_tables:
         st.warning(f'Missing: {", ".join(model.missing_tables)}. Some views will be limited.')
+    for entry in model.file_log:
+        if entry.get('missing_columns'):
+            st.error(entry['note'], icon='⚠️')
     st.caption(f'Data fingerprint `{model.fingerprint}` changes whenever any sales value changes.')
 
     st.header('2. Filters')
@@ -356,8 +359,11 @@ with tab_data:
     st.subheader('Files read')
     st.dataframe(pd.DataFrame(model.file_log), hide_index=True, use_container_width=True)
 
+    st.subheader('Grain statements')
+    st.caption('What one row of each table represents. Calculated from the loaded files.')
+    st.dataframe(an.grain_table(model), hide_index=True, use_container_width=True)
+
     st.subheader('Data model')
-    st.markdown('\n'.join(f'- **{k.title()}**: {v}' for k, v in an.GRAIN.items()))
     st.markdown(
         '**Relationships used**\n'
         '- Sales[Store ID] → Stores[ID] (many-to-one)\n'
@@ -372,7 +378,13 @@ with tab_data:
     mj = pd.DataFrame(model.merges)
     if not mj.empty:
         mj['result'] = mj['changed'].map({False: '✅ unchanged', True: '⚠️ changed'})
-        st.dataframe(mj[['join', 'rows_before', 'rows_after', 'sum_before', 'sum_after', 'result']],
+        mj['explanation'] = mj.apply(lambda r: r['warning'] if r['changed'] else (
+            'Each store-year matches at most one survey row, so no revenue is added or lost.'
+            if 'Survey' in r['join'] else
+            'Many-to-one: each sales row finds at most one lookup row, so no revenue is added or lost.'),
+            axis=1)
+        st.dataframe(mj[['join', 'rows_before', 'rows_after', 'sum_before', 'sum_after', 'result',
+                         'explanation']],
                      hide_index=True, use_container_width=True,
                      column_config={'sum_before': st.column_config.NumberColumn(format='$%,.0f'),
                                     'sum_after': st.column_config.NumberColumn(format='$%,.0f')})

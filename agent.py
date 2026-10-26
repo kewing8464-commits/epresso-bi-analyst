@@ -119,12 +119,16 @@ Rules:
 - Never ask for, write, or run code. Never claim to modify the data.
 - If a tool returns an error, explain it plainly and suggest a valid alternative.
 
-Answer in this exact format (Markdown):
-**Scope:** which data the numbers cover (copy the filters / years from the tool result scope).
+Answer in this exact format (Markdown), starting with the scope:
+**Scope:** which data the numbers cover, e.g. "all stores, all years" or "Chicago (SH11), 2027".
+  Add "(from the sidebar filter)" when the app note says sidebar filters are applied.
 **Findings:** facts taken directly from tool results, with the numbers.
-**Interpretation:** what the findings might mean, labeled as interpretation.
-**Limitations and next steps:** caveats from the tool results and what else would be needed.
-Keep it under 200 words. Format money like $1,234,567 and percents like 12.3%."""
+**Interpretation:** what the findings might mean, clearly an interpretation, not a fact.
+**Limitations:** the relevant caveats from the tool results.
+**Next steps:** a cautious next step, or exactly "No recommendation is supported by this data."
+  when the data cannot support one (always for profit, closing/opening, and causation questions,
+  followed by the information management would need).
+Keep it under 220 words. Format money like $1,234,567 and percents like 12.3%."""
 
 
 # ---------------------------------------------------------------- dispatcher
@@ -145,7 +149,10 @@ def run_tool(name: str, args: dict, model, log: list, base: Filters | None = Non
                 result = TOOLS[name]['fn'](model, **kwargs)
             except (TypeError, ValueError) as exc:   # bad argument types from a router
                 result = analytics._error(name, f'Invalid arguments: {exc}')
-    log.append({'tool': name, 'arguments': args, 'result': result.to_dict()})
+    entry = {'tool': name, 'arguments': args, 'result': result.to_dict()}
+    if base is not None and not base.is_empty() and name in TOOLS and TOOLS[name]['uses_dashboard_filters']:
+        entry['sidebar_filters_applied'] = base.to_dict()    # shown in the log, never hidden
+    log.append(entry)
     return result
 
 
@@ -297,15 +304,17 @@ def _money(x):
 
 def _rules_text(question: str, results: list[ToolResult]) -> str:
     """Write the answer from tool results with fixed templates (no language model)."""
-    findings, interp, limits = [], [], []
+    findings, interp, limits, nexts = [], [], [], []
     scope = None
     q = question.lower()
     for r in results:
         if r.error:
             findings.append(f'`{r.tool}` could not answer: {r.error}')
             continue
-        if scope is None and r.scope.get('filters'):
+        if r.scope.get('filters') and (scope is None or scope.startswith('none')):
             scope = r.scope['filters']
+            if r.scope.get('dashboard_filters_applied'):
+                scope += ' (from the sidebar filter)'
         v = r.value
         if r.tool == 'get_revenue_total':
             findings.append(f'Total revenue: **{_money(v["total_revenue"])}** ({v["period"]}, '
@@ -368,14 +377,32 @@ def _rules_text(question: str, results: list[ToolResult]) -> str:
                            '(plus annual survey scores). Any revenue figures below are context, not an answer.')
         interp.append('The highest-revenue store is not necessarily the most profitable one; costs '
                       'could differ a lot between stores.')
-    if any(w in q for w in ('should', 'close', 'recommend')):
-        interp.append('Revenue trends alone cannot justify closing or keeping a store. Management '
-                      'would also need operating costs, profitability, lease terms and customer behaviour.')
+        nexts.append('To answer it, management would need cost and expense data by store '
+                     '(cost of goods, wages, rent), which this data does not contain.')
+    tools = {r.tool for r in results if not r.error}
+    if any(w in q for w in ('should', 'close', 'recommend', 'shut down', 'invest')):
+        interp.append('Revenue trends alone cannot justify closing or keeping a store.')
+        nexts.append('Before deciding, management would need operating costs and profitability by '
+                     'store, lease obligations, local market conditions and customer behaviour.')
+    elif 'get_satisfaction_vs_revenue' in tools:
+        nexts.append('Testing whether satisfaction drives revenue would need a controlled comparison '
+                     '(for example, stores of similar size and market) or an experiment.')
+    elif 'get_revenue_growth' in tools and any(
+            r.value and r.value['summary']['groups_that_declined'] for r in results
+            if r.tool == 'get_revenue_growth' and not r.error):
+        nexts.append('Investigate why the declining groups fell (local competition, staffing, '
+                     'store traffic); this data shows only that revenue fell, not why.')
+    elif 'get_data_quality_report' in tools:
+        nexts.append('Correct any error-level issues in the source files and upload them again.')
+    next_text = ('No recommendation is supported by this data. ' + ' '.join(nexts)).strip() \
+        if (missing or 'should' in q or 'close' in q or 'recommend' in q or not nexts
+            or 'get_satisfaction_vs_revenue' in tools) else ' '.join(nexts)
     return '\n\n'.join([
         f'**Scope:** {scope or "n/a"}',
         '**Findings:** ' + '\n\n'.join(findings),
         '**Interpretation:** ' + (' '.join(interp) or 'None beyond the findings above.'),
-        '**Limitations and next steps:** ' + ' '.join(limits),
+        '**Limitations:** ' + (' '.join(limits) or 'None reported by the tools.'),
+        '**Next steps:** ' + next_text,
     ])
 
 
