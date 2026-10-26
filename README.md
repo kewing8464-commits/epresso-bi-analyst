@@ -21,6 +21,8 @@ _URL here after deploying on Streamlit Community Cloud. The app may take up to a
 7. **Validation tab:** key totals for comparison with Power BI. Click **Pin as baseline**, upload a modified file, and the Change column shows exactly what moved.
 
 ## Data model
+The **Data & quality** tab rebuilds this grain table from whatever files are loaded, including the source file and sheet, the row count, and duplicate keys.
+
 | Table | Grain (one row is...) | Key |
 |---|---|---|
 | Sales | one store, one product, one month. `Date` is the last day of the month and `Revenue` is that month's revenue. 25,200 rows = 21 stores x 20 products x 60 months. | Sales ID |
@@ -35,7 +37,7 @@ _URL here after deploying on Streamlit Community Cloud. The app may take up to a
 - `Sales[Product ID]` -> `Products[Product ID]` (many-to-one)
 - **Survey is joined at its own grain.** Revenue is first summed to store + year, then matched to the survey on `Store ID` + `Year`. The survey is never joined to individual sales rows, so it cannot duplicate revenue.
 
-**Merge checks.** Every join is run through `check_merge()`, which compares the row count and the revenue total before and after the join. All three joins keep 25,200 rows and $42,174,440. If a lookup table ever contains a repeated key, the duplicate is dropped and reported so it cannot multiply revenue (this is covered by a test).
+**Merge checks.** Every join is run through `check_merge()`, which compares the row count and the revenue total before and after the join, and the Data tab shows the result with an explanation. All three lookup joins keep 25,200 rows and $42,174,440. The survey join keeps 105 store-year rows and the same total. If a lookup table ever contains a repeated key, the duplicate is dropped and reported so it cannot multiply revenue (this is covered by a test).
 
 **A relationship we deliberately did not use.** The original Power BI model joins `Sales[Store ID]` (e.g. `SH11`) to `Survey Results[Survey ID]` (e.g. `SH11_27`). Those values never match, so that relationship links nothing. See [docs/VALIDATION.md](docs/VALIDATION.md).
 
@@ -46,6 +48,9 @@ _URL here after deploying on Streamlit Community Cloud. The app may take up to a
 - **Growth** = (revenue in end year - revenue in start year) / revenue in start year. Only the two end years are compared.
 - **Monthly share of annual revenue** = a month's revenue / the total revenue of the same calendar year, within the current filters. The assistant also reports Power BI's "% of grand total" version: each calendar month (all years added) / the total of all years.
 - **Satisfaction vs revenue** = Pearson correlation between a store's annual revenue and its survey score for that year. This is an association, not a cause.
+
+## Updated data
+The app expects the same file names, sheet names, column names, and data types, but any values can change. Rows may be added or removed, values may be blank, and stores, products, categories, or years may appear or disappear. Every filter list is built from the loaded data. Blank values are reported, not fatal. A missing required column produces a plain message naming it. The upload cache is keyed on the file contents, so a modified file is never confused with the original one. `tests/test_updated_data.py` covers each of these cases.
 
 ## Data quality checks
 Run on every upload: missing or non-numeric revenue, invalid dates, exact duplicate rows, repeated Sales IDs, keys missing from lookup tables, duplicate lookup keys, products in more than one category, stores missing months, StoreYear not matching Store ID + date, survey scores outside their scales, survey stores missing from the stores table, and the same state assigned to several regions.
@@ -62,7 +67,7 @@ Found in the supplied data:
 1. The user asks a question in the chat.
 2. The model (or the keyword rules) chooses one or more approved functions and their arguments.
 3. `agent.run_tool()` (the dispatcher) checks that the function exists and that every argument is allowed, then runs it on the currently loaded data.
-4. The result goes back to the model, which writes the answer in four sections: Scope, Findings, Interpretation, and Limitations and next steps.
+4. The result goes back to the model, which writes the answer starting with its **Scope**, then **Findings** (tool results only), **Interpretation**, **Limitations**, and **Next steps**. Next steps says "No recommendation is supported by this data." when the data cannot support one.
 5. The app checks every number in the answer against the tool results (`verify_numbers`) and shows the full tool-call log: function name, arguments, and raw result.
 
 **Approved functions** (in `analytics.py`)
@@ -83,7 +88,7 @@ Found in the supplied data:
 - Treat revenue as profit, or correlation as causation.
 - Recommend closing or investing in a store based on revenue alone.
 
-**Scope.** By default, answers cover the full dataset unless the question names a subset. A toggle applies the dashboard filters to every tool call instead. Each answer shows which applies.
+**Scope.** By default, answers cover the full dataset unless the question names a subset. A toggle applies the sidebar filters to every tool call instead; the scope then says "(from the sidebar filter)" and the tool-call log lists the sidebar filters that were applied, so no filter state is hidden.
 
 **Usage limits.** 15 questions per browser session, and 200 model calls per day across all visitors. When a limit is reached, or the API fails, the rules-based assistant answers.
 
@@ -104,7 +109,7 @@ See [docs/VALIDATION.md](docs/VALIDATION.md) for the Power BI comparison, the in
 | `streamlit_app.py` | Screen layout and interaction |
 | `analytics.py` | Loading, data model, quality checks, metrics, and the approved tools (no Streamlit code) |
 | `agent.py` | Tool registry, dispatcher, rules router, Gemini router, and number check |
-| `tests/` | 36 tests on a tiny hand-checkable dataset, including a fake model for the function-calling loop |
+| `tests/` | 45 tests on a tiny hand-checkable dataset: calculations, the assistant (with a fake model for the function-calling loop), and updated-data cases (blank values, new or removed stores, years and categories, missing columns) |
 | `scripts/independent_check.py` | Recalculates totals from the raw files without pandas or app code |
 | `scripts/make_modified_data.py` | Creates the +$1,000 test file |
 | `docs/` | Validation and assistant test evidence |

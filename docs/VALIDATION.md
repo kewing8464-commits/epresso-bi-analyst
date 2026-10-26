@@ -67,25 +67,44 @@ Total revenue: 42,174,440.00
 Every figure matches the app to the cent. The check also proves that the app's joins did not add or drop revenue.
 
 ## 3. $1,000 modified-data test
-```
-$ python scripts/make_modified_data.py Support_EX_B_Sales.xlsx S1120280601
-Row 703: Sales ID S1120280601, 2028-06-30, SH11 (Chicago), C1 Beans, P01 French Roast, Revenue 590
-Original revenue: 590.00
-Modified revenue: 1,590.00
-```
-Only that one cell changed. The app's Python code was not touched. Steps: load the original files, click **Pin as baseline**, remove the Sales file, and upload `Support_EX_B_Sales_plus1000.xlsx`.
 
-| Check | Original | Modified | Expected | Actual | Pass |
-|---|---|---|---|---|---|
-| Total revenue | $42,174,440 | $42,175,440 | +$1,000 | +$1,000.00 | Pass |
-| Brick & mortar revenue | $14,955,560 | $14,956,560 | +$1,000 | +$1,000.00 | Pass |
-| Website revenue | $27,218,880 | $27,218,880 | no change | 0.00 | Pass |
-| Revenue 2028 | $8,969,470 | $8,970,470 | +$1,000 | +$1,000.00 | Pass |
-| Revenue in June (all years) | $2,743,370 | $2,744,370 | +$1,000 | +$1,000.00 | Pass |
-| Beans revenue | $5,672,720 | $5,673,720 | +$1,000 | +$1,000.00 | Pass |
-| Every other year, month, and category | | | no change | 0.00 | Pass |
-| Filtered: Chicago, 2028 (assistant) | $269,100 | $270,100 | +$1,000 | $270,100 | Pass |
-| Data fingerprint | `670c0b95` | `5edd2917` | changes | changed | Pass |
-| Chart data: Annual revenue by channel, 2028 Brick & Mortar bar | $2,629,830 | $2,630,830 | +$1,000 | $2,630,830 (the same `revenue_by` result the chart plots) | Pass |
+### Predictions
+> **Team to do:** write your own predictions before you run this test on the hosted app, then compare. The rubric asks for predictions made before the upload. The list below is the expected outcome worked out from the data, for you to check against.
+- The change is +$1,000 on Sales ID `S1120280601`, a brick & mortar row for Chicago, June 2028, Beans.
+- **Should change by exactly +$1,000:** total revenue ($42,174,440 to $42,175,440), brick & mortar revenue, revenue 2028, 2028 brick & mortar, June (all years), Beans, and every filter that includes Chicago + 2028.
+- **Should NOT change:** website revenue, every other year, every other month, every other category, Chicago 2027, and Chicago's 2025 to 2029 growth (2028 is not one of the two end years).
+- **Charts that should change:** the 2028 Brick & Mortar bar in "Annual revenue by channel"; the June 2028 point on the Brick & Mortar line in "Monthly revenue trend"; the Jun 2028 heatmap cell; the Beans bar.
 
-The Validation tab's "Changed metrics" banner listed exactly these six metrics: total, brick & mortar, 2028, 2028 brick & mortar, June, and Beans. The original dataset was then restored by uploading the original Sales file again. An automated version of this test is `test_adding_1000_changes_total_by_exactly_1000` in `tests/test_analytics.py`.
+### Modified-data test record
+| Item | Entry |
+|---|---|
+| Table and row identifier | Sales table (`Support_EX_B_Sales.xlsx`, sheet Sales), Sales ID `S1120280601`, spreadsheet row 703 |
+| Date / store / channel of the row | 2028-06-30 / SH11 Chicago, IL / Brick & Mortar (product P01 French Roast, category Beans) |
+| Original value | $590 |
+| Modified value | $1,590 (revenue is stored, so exactly $1,000 was added; no other cell changed) |
+| Expected total revenue after change | $42,174,440 + $1,000 = $42,175,440 |
+| Actual total revenue after change | $42,175,440 (Validation tab, Change column +1,000.00) |
+| Chart that should change, and what you saw | "Annual revenue by channel": the data behind the 2028 Brick & Mortar bar went from $2,629,830 to $2,630,830. With the Store filter set to Chicago, the data behind the June 2028 point of the monthly trend went from $17,350 to $18,350. _(Confirm by hovering over the chart on your own run.)_ |
+| Filter combinations checked (changed / unchanged) | See the table below |
+| Code changes required? | None. The new file was uploaded through the sidebar, without a code edit or a restart. The upload cache is keyed on the file contents, and the data fingerprint changed from `670c0b95` to `5edd2917`. |
+| Original data restored? | Yes. The original Sales file was loaded again (fingerprint back to `670c0b95`). The original file on disk was never edited; the script writes a separate `_plus1000` copy. |
+
+| Filter combination | Original | Modified | Change | Predicted |
+|---|---|---|---|---|
+| Chicago (SH11), 2028 | $269,100 | $270,100 | +1,000 | changes |
+| Chicago (SH11), Beans, 2028 | $36,800 | $37,800 | +1,000 | changes |
+| Brick & Mortar, 2028 | $2,629,830 | $2,630,830 | +1,000 | changes |
+| Midwest region (includes Chicago), all years | $3,084,350 | $3,085,350 | +1,000 | changes |
+| Chicago (SH11), 2027 | $355,730 | $355,730 | 0 | unchanged |
+| Website, 2028 | $6,339,640 | $6,339,640 | 0 | unchanged |
+| Syrups, 2028 | $564,410 | $564,410 | 0 | unchanged |
+| Denver (SH13), all years | $732,380 | $732,380 | 0 | unchanged |
+| Chicago growth 2025 to 2029 | -66.81% | -66.81% | 0 | unchanged |
+
+Every result matched the expected outcome. On the Validation tab, the "Changed metrics" banner listed exactly six metrics, each +1,000.00: total, brick & mortar, 2028, 2028 brick & mortar, June, and Beans.
+
+**Assistant before and after:** "How much revenue did the Chicago store generate in 2028?" returned $269,100 (data `670c0b95`), then $270,100 (data `5edd2917`). Both answers show their tool-call log with `get_revenue_total(filters={years:[2028], stores:[Chicago]})`.
+
+An automated version of this test is `test_adding_1000_changes_total_by_exactly_1000` in `tests/test_analytics.py`.
+
+> Attach screenshots: the Validation tab with the baseline pinned, and both assistant answers with their tool-call logs open.

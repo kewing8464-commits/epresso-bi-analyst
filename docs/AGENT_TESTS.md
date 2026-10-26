@@ -15,6 +15,12 @@ The results below were produced by the **rules-based** mode, the fallback used w
 | Edge: ambiguous | How did Orlando do in 2027? | `get_revenue_total(filters={years:[2027], stores:[Orlando]})` | There are two Orlando stores (SH01, SH08), so the assistant must not guess. | First version: "unsupported question" (no keyword matched). After revision: the tool returns "Orlando matches 2 stores: SH01 Orlando, FL, SH08 Orlando, FL. Use a store ID." | Pass after revision | The rules router now falls back to `get_revenue_total` whenever a question names a store, year, channel, category, or product. |
 | Edge: display | (any answer with two dollar amounts) | n/a | Money should display as plain text | First version: Streamlit treated "$269,100 ... $22,425" as a LaTeX math formula and garbled it. | Pass after revision | Answers are escaped (`md_safe`) before display. Retested in the browser. |
 
+| Extra: fix and retest (updated data) | After a new store "S9" appears in Sales but not in the Stores file: "How much revenue did S9 generate?" | `get_revenue_total(filters={stores:[S9]})` | The guide says a store may appear in updated data. Its revenue must count, be reported as an unmatched key, and be answerable. | First version: the revenue was counted and reported, but the tool replied "Unknown store S9" because store lookup only checked the Stores file. After the fix, it returns S9's revenue. | Pass after revision | `resolve_store` now also accepts store IDs found in the sales data. Found by `test_new_store_appears` (tests/test_updated_data.py) and retested. |
+
+Every answer has the same five sections: **Scope**, **Findings** (from tool results only), **Interpretation**, **Limitations**, and **Next steps**. Next steps says "No recommendation is supported by this data." for profit, closing, and causation questions, followed by the information management would need.
+
+> Attach screenshots of the tool-call log for Tests 1, 2 and 5 (open the "Tool-call log" expander under the answer).
+
 ## Live model (Gemini) results
 | # | Function(s) the model chose | Answer summary | Numbers verified? | Pass/Fail | Notes |
 |---|---|---|---|---|---|
