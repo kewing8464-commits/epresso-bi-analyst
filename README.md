@@ -61,7 +61,7 @@ Found in the supplied data:
 - Region labels look inconsistent: the two Orlando, FL stores are in different regions (South and East), and Flushing, NY is labelled "Southwest". Region results depend on these labels as given.
 
 ## Assistant
-**What it is.** A live language-model agent using **Google Gemini function calling** (`gemini-2.5-flash` by default). When no API key is configured, or the model fails or runs out of quota, a **rules-based assistant** answers instead and the app says so on screen. Both use the same approved functions.
+**What it is.** A live language-model agent using **Google Gemini function calling** (`gemini-flash-latest` by default, Google's alias for its current Flash model; if a model has been retired the app tries `gemini-3.5-flash`, then `gemini-flash-lite-latest`). When no API key is configured, or the model fails or runs out of quota, a **rules-based assistant** answers instead and the app says so on screen. Both use the same approved functions.
 
 **How an answer is produced**
 1. The user asks a question in the chat.
@@ -124,6 +124,6 @@ Locally: `pip install -r requirements-dev.txt`, then `streamlit run streamlit_ap
 Never commit API keys. On Streamlit Community Cloud, open **App settings > Secrets** and add:
 ```toml
 GEMINI_API_KEY = "your-key"
-# optional: GEMINI_MODEL = "gemini-2.5-flash"
+# optional: GEMINI_MODEL = "gemini-3.5-flash"
 ```
 For local work, put the same lines in `.streamlit/secrets.toml`, which is git-ignored.

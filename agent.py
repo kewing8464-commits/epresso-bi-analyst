@@ -10,7 +10,11 @@ import re
 import analytics
 from analytics import Filters, ToolResult
 
-DEFAULT_MODEL = 'gemini-2.5-flash'
+DEFAULT_MODEL = 'gemini-flash-latest'   # Google's alias for its current Flash model
+# Google retires model versions (gemini-2.5-flash was closed to new keys in 2026). If the
+# configured model is gone (404), the next one is tried instead of failing.
+FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-flash-lite-latest']
+REQUEST_TIMEOUT_MS = 45_000
 MAX_TOOL_ROUNDS = 5
 
 # ------------------------------------------------------------- tool registry
@@ -440,7 +444,24 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
     except ImportError as exc:
         raise ModelUnavailable(f'google-genai is not installed ({exc})')
 
-    client = client or genai.Client(api_key=api_key)
+    client = client or genai.Client(api_key=api_key,
+                                    http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
+    candidates = [model_name] + [m for m in FALLBACK_MODELS if m != model_name]
+
+    def generate(contents, config):
+        """Call the first model that exists; remember it for the rest of this question."""
+        nonlocal candidates
+        last = None
+        for name in candidates:
+            try:
+                resp = client.models.generate_content(model=name, contents=contents, config=config)
+                candidates = [name]
+                return resp
+            except errors.APIError as exc:
+                if getattr(exc, 'code', None) != 404:
+                    raise
+                last = exc
+        raise last
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT, tools=_gemini_tools(), temperature=0,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
@@ -457,7 +478,7 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
     log: list = []
     try:
         for _ in range(MAX_TOOL_ROUNDS):
-            resp = client.models.generate_content(model=model_name, contents=contents, config=config)
+            resp = generate(contents, config)
             calls = resp.function_calls or []
             if not calls:
                 break
@@ -469,10 +490,9 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
                     name=call.name, response={'result': json.loads(json.dumps(result.to_dict(), default=str))}))
             contents.append(types.Content(role='user', parts=parts))
         else:
-            resp = client.models.generate_content(
-                model=model_name, contents=contents + [types.Content(role='user', parts=[
-                    types.Part.from_text(text='Write the final answer now using the tool results.')])],
-                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0))
+            resp = generate(contents + [types.Content(role='user', parts=[
+                types.Part.from_text(text='Write the final answer now using the tool results.')])],
+                types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0))
         text = (resp.text or '').strip()
     except errors.APIError as exc:
         code = getattr(exc, 'code', None)
@@ -480,6 +500,8 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
             raise ModelUnavailable('the model\'s free-tier quota or rate limit was reached')
         if code in (401, 403):
             raise ModelUnavailable('the API key was rejected')
+        if code == 404:
+            raise ModelUnavailable('none of the configured Gemini models are available to this key')
         raise ModelUnavailable(f'the model API returned an error ({code})')
     except Exception as exc:  # network errors, timeouts, unexpected responses
         raise ModelUnavailable(f'the model could not be reached ({type(exc).__name__})')
@@ -489,7 +511,7 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
     notice = ''
     if not log:
         notice = 'The model answered without calling any tool, so none of its numbers are backed by a calculation.'
-    return {'mode': 'llm', 'text': text, 'tool_log': log, 'notice': notice,
+    return {'mode': 'llm', 'text': text, 'tool_log': log, 'notice': notice, 'model': candidates[0],
             'verification': verify_numbers(text, log, question)}
 
 

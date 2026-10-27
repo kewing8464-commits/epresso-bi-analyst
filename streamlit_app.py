@@ -314,7 +314,7 @@ with tab_assistant:
             st.write(item['question'])
         with st.chat_message('assistant'):
             a = item['answer']
-            badge = 'Live model' if a['mode'] == 'llm' else 'Rules-based'
+            badge = f'Live model ({a.get("model", model_name)})' if a['mode'] == 'llm' else 'Rules-based'
             st.caption(f'{badge} · data `{item["fingerprint"]}` · scope: {item["scope"]}')
             if a.get('notice'):
                 st.warning(a['notice'])

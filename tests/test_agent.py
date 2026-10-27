@@ -116,3 +116,28 @@ def test_model_failure_falls_back_to_rules(model, monkeypatch):
     out = agent.answer_question('Total revenue?', model, mode='auto', api_key='x')
     assert out['mode'] == 'rules' and 'quota' in out['notice']
     assert out['tool_log'][0]['result']['value']['total_revenue'] == 1025
+
+
+class RetiredFirstModel(FakeModels):
+    """The first model name returns 404 (retired); the fallback model works."""
+    def __init__(self, answer):
+        super().__init__(answer)
+        self.models_tried = []
+
+    def generate_content(self, model, contents, config):
+        from google.genai import errors
+        self.models_tried.append(model)
+        if model == 'retired-model':
+            raise errors.ClientError(404, {'error': {'code': 404, 'message': 'no longer available',
+                                                     'status': 'NOT_FOUND'}})
+        return super().generate_content(model, contents, config)
+
+
+def test_retired_model_falls_back_to_next_model(model):
+    pytest.importorskip('google.genai')
+    fake = RetiredFirstModel('**Scope:** 2026\n**Findings:** Revenue was $575.')
+    out = agent.answer_with_llm('Revenue in 2026?', model, api_key='x', model_name='retired-model',
+                                client=SimpleNamespace(models=fake))
+    assert fake.models_tried[0] == 'retired-model'
+    assert out['model'] == agent.FALLBACK_MODELS[0]
+    assert out['tool_log'][0]['result']['value']['total_revenue'] == 575
