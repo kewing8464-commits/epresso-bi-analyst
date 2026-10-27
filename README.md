@@ -61,7 +61,7 @@ Found in the supplied data:
 - Region labels look inconsistent: the two Orlando, FL stores are in different regions (South and East), and Flushing, NY is labelled "Southwest". Region results depend on these labels as given.
 
 ## Assistant
-**What it is.** A live language-model agent using **Google Gemini function calling** (`gemini-3.8-flash` by default; if a model has been retired or is overloaded, the app tries `gemini-3.5-flash`, `gemini-flash-latest`, then `gemini-flash-lite-latest`). When no API key is configured, or the model fails or runs out of quota, a **rules-based assistant** answers instead and the app says so on screen. Both use the same approved functions.
+**What it is.** A live language-model agent using **Google Gemini function calling** (`gemini-3.5-flash` by default; if a model has been retired or is overloaded, the app tries `gemini-3.8-flash`, `gemini-flash-latest`, then `gemini-flash-lite-latest`). When no API key is configured, or the model fails or runs out of quota, a **rules-based assistant** answers instead and the app says so on screen. Both use the same approved functions.
 
 **How an answer is produced**
 1. The user asks a question in the chat.

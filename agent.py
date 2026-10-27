@@ -10,11 +10,11 @@ import re
 import analytics
 from analytics import Filters, ToolResult
 
-DEFAULT_MODEL = 'gemini-3.8-flash'
+DEFAULT_MODEL = 'gemini-3.5-flash'
 # Google retires model versions (gemini-2.5-flash was closed to new keys in 2026) and busy
 # models return 503/504. If the configured model is gone (404) or overloaded (500/503/504), the next
 # one is tried instead of failing.
-FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest',
+FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest',
                    'gemini-flash-lite-latest']
 RETRY_CODES = (404, 500, 503, 504)
 REQUEST_TIMEOUT_MS = 45_000
@@ -117,6 +117,9 @@ Rules:
 - Only state numbers that appear in a tool result in THIS turn. Never estimate, recall, or
   compute new figures yourself (no adding, subtracting or dividing tool numbers). If you need a
   number you do not have, call another tool.
+- Copy each number as the tool gave it (you may drop cents). Do not turn it into a new rounded
+  figure such as "over $22,000" or "about half a million".
+- Plain text only: no LaTeX or math notation (write r = 0.235, not $r = 0.235$).
 - Always call at least one tool before answering a question about the data.
 - If a question needs data that is not available (profit, costs, customers, prices...), call
   get_data_coverage, say clearly what is missing, and only then offer revenue facts as context.
