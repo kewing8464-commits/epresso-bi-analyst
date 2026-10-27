@@ -159,3 +159,21 @@ def test_overloaded_model_falls_back_too(model):
     out = agent.answer_with_llm('Revenue in 2026?', model, api_key='x', model_name='busy-model',
                                 client=SimpleNamespace(models=fake))
     assert out['mode'] == 'llm' and out['model'] == agent.FALLBACK_MODELS[0]
+
+
+def test_daily_quota_on_one_model_moves_to_the_next(model):
+    pytest.importorskip('google.genai')
+    from google.genai import errors
+
+    class OutOfQuota(RetiredFirstModel):
+        def generate_content(self, model, contents, config):
+            if model == 'used-up-model':
+                self.models_tried.append(model)
+                raise errors.ClientError(429, {'error': {'code': 429, 'message': 'per day limit',
+                                                         'status': 'RESOURCE_EXHAUSTED'}})
+            return super().generate_content(model, contents, config)
+
+    fake = OutOfQuota('Revenue was $575.')
+    out = agent.answer_with_llm('Revenue in 2026?', model, api_key='x', model_name='used-up-model',
+                                client=SimpleNamespace(models=fake))
+    assert out['mode'] == 'llm' and out['model'] == agent.FALLBACK_MODELS[0]

@@ -90,7 +90,7 @@ Found in the supplied data:
 
 **Scope.** By default, answers cover the full dataset unless the question names a subset. A toggle applies the sidebar filters to every tool call instead; the scope then says "(from the sidebar filter)" and the tool-call log lists the sidebar filters that were applied, so no filter state is hidden.
 
-**Usage limits.** 15 questions per browser session, and 200 model calls per day across all visitors. When a limit is reached, or the API fails, the rules-based assistant answers.
+**Usage limits.** 15 questions per browser session, and 200 model calls per day across all visitors. Gemini's free tier allows about 20 requests per day **per model**, and one question uses 2 or 3 requests. When a model runs out of quota, is overloaded, or has been retired, the app tries the next model in its list. Only when every model fails does the rules-based assistant answer, and the answer says why.
 
 ## Validation
 See [docs/VALIDATION.md](docs/VALIDATION.md) for the Power BI comparison, the independent check (`scripts/independent_check.py`), and the $1,000 modified-data test (`scripts/make_modified_data.py`). See [docs/AGENT_TESTS.md](docs/AGENT_TESTS.md) for the five required assistant tests.
