@@ -10,10 +10,13 @@ import re
 import analytics
 from analytics import Filters, ToolResult
 
-DEFAULT_MODEL = 'gemini-flash-latest'   # Google's alias for its current Flash model
-# Google retires model versions (gemini-2.5-flash was closed to new keys in 2026). If the
-# configured model is gone (404), the next one is tried instead of failing.
-FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-flash-lite-latest']
+DEFAULT_MODEL = 'gemini-3.8-flash'
+# Google retires model versions (gemini-2.5-flash was closed to new keys in 2026) and busy
+# models return 503. If the configured model is gone (404) or overloaded (500/503), the next
+# one is tried instead of failing.
+FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest',
+                   'gemini-flash-lite-latest']
+RETRY_CODES = (404, 500, 503)
 REQUEST_TIMEOUT_MS = 45_000
 MAX_TOOL_ROUNDS = 5
 
@@ -458,7 +461,7 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
                 candidates = [name]
                 return resp
             except errors.APIError as exc:
-                if getattr(exc, 'code', None) != 404:
+                if getattr(exc, 'code', None) not in RETRY_CODES:
                     raise
                 last = exc
         raise last
@@ -500,8 +503,8 @@ def answer_with_llm(question: str, model, api_key: str, model_name: str = DEFAUL
             raise ModelUnavailable('the model\'s free-tier quota or rate limit was reached')
         if code in (401, 403):
             raise ModelUnavailable('the API key was rejected')
-        if code == 404:
-            raise ModelUnavailable('none of the configured Gemini models are available to this key')
+        if code in RETRY_CODES:
+            raise ModelUnavailable('every configured Gemini model is retired or overloaded right now')
         raise ModelUnavailable(f'the model API returned an error ({code})')
     except Exception as exc:  # network errors, timeouts, unexpected responses
         raise ModelUnavailable(f'the model could not be reached ({type(exc).__name__})')

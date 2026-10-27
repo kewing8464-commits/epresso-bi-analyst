@@ -141,3 +141,21 @@ def test_retired_model_falls_back_to_next_model(model):
     assert fake.models_tried[0] == 'retired-model'
     assert out['model'] == agent.FALLBACK_MODELS[0]
     assert out['tool_log'][0]['result']['value']['total_revenue'] == 575
+
+
+def test_overloaded_model_falls_back_too(model):
+    pytest.importorskip('google.genai')
+    from google.genai import errors
+
+    class Busy(RetiredFirstModel):
+        def generate_content(self, model, contents, config):
+            if model == 'busy-model':
+                self.models_tried.append(model)
+                raise errors.ServerError(503, {'error': {'code': 503, 'message': 'high demand',
+                                                         'status': 'UNAVAILABLE'}})
+            return super().generate_content(model, contents, config)
+
+    fake = Busy('Revenue was $575.')
+    out = agent.answer_with_llm('Revenue in 2026?', model, api_key='x', model_name='busy-model',
+                                client=SimpleNamespace(models=fake))
+    assert out['mode'] == 'llm' and out['model'] == agent.FALLBACK_MODELS[0]
