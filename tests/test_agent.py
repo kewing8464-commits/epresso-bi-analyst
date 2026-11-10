@@ -74,6 +74,17 @@ def test_verify_numbers_accepts_rounding_and_flags_inventions(model):
     assert bad['unverified'] == ['$412']
 
 
+def test_verify_numbers_does_not_flag_calendar_years(model):
+    # Live test 2: "ignoring performance in intermediate years (2026-2028)" was flagged
+    # as unverified numbers. A plain year is a date, not a claim.
+    log = []
+    agent.run_tool('get_revenue_total', {}, model, log)
+    r = agent.verify_numbers('Only 2025 and 2029 are compared, so years 2026 to 2028 are ignored. Revenue was $1,025.', log)
+    assert r['unverified'] == []
+    # A dollar amount that happens to look like a year is still checked.
+    assert agent.verify_numbers('Profit was $2,027.', log)['unverified'] == ['$2,027']
+
+
 # ------------------------------------------------------------ fake LLM loop
 class FakeModels:
     """Turn 1: asks for get_revenue_total(filters={'years': [2026]}). Turn 2: answers."""

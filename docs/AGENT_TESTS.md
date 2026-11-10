@@ -2,7 +2,7 @@
 
 The results below were produced by the **rules-based** mode, the fallback used when no API key is configured, and run against the original files (fingerprint `670c0b95`). Both modes use the same functions, so the numbers do not depend on the mode.
 
-> **To do once the Gemini key is added:** run the same five questions in live-model mode and fill in the "Live model" rows. Check each answer's tool-call log, and confirm the green "All N numbers match a tool result" message appears.
+The same five questions were then run against the **live language model** (Gemini, `gemini-3.5-flash`) on the deployed app on November 9, 2026. Results are in the "Live model" table below.
 
 | # | Test question | Function used | Expected result / behavior | Actual result (rules mode) | Pass/Fail | Revision made |
 |---|---|---|---|---|---|---|
@@ -22,13 +22,15 @@ Every answer has the same five sections: **Scope**, **Findings** (from tool resu
 > Attach screenshots of the tool-call log for Tests 1, 2 and 5 (open the "Tool-call log" expander under the answer).
 
 ## Live model (Gemini) results
+Run on the deployed app (https://dailydebrief.streamlit.app/) on November 9, 2026, model `gemini-3.5-flash`, original files (fingerprint `670c0b95`) unless noted.
+
 | # | Function(s) the model chose | Answer summary | Numbers verified? | Pass/Fail | Notes |
 |---|---|---|---|---|---|
-| 1 | _fill in_ | | | | |
-| 2 | _fill in_ | | | | |
-| 3 | _fill in_ | | | | |
-| 4 | _fill in_ | | | | |
-| 5 | _fill in_ | | | | |
+| 1 | `get_revenue_total(filters={years:[2028], channels:[Website]})` | $6,339,640 for the website in 2028, average $528,303 a month, 240 rows. | Yes, "All 8 numbers match a tool result" | Pass | Same number as rules mode. The Interpretation line ("consistent sales performance") goes slightly beyond what one total shows; the number itself is correct. |
+| 2 | `get_revenue_growth(dimension=store)` | SH11 Chicago, -66.81% ($539,740 in 2025 to $179,130 in 2029). Notes that only the end years are compared. | Flagged "2026, 2028" as unverified | Pass after revision | The flagged numbers were the years in "ignoring 2026 to 2028", not claims. Fixed: the checker now treats a plain calendar year as a date (a dollar amount that looks like a year is still checked). Test: `test_verify_numbers_does_not_flag_calendar_years`. |
+| 3 | `get_data_coverage`, then `get_revenue_breakdown(dimension=store, top_n=1)` | Opens with "Profitability cannot be determined" and lists the missing data; gives the highest-revenue channel (SH00 Website, $27,218,880, 64.5%) as context only; "No recommendation is supported by this data." | Yes, all 6 | Pass | The model checked coverage first without being told to, as the system prompt asks. |
+| 4 | `get_satisfaction_vs_revenue` | r = 0.235 (weak), interest r = 0.125, average satisfaction 3.4. "Correlation is not causation", names location, size and demand as possible third factors, and notes 5 website store-years have no scores. | Yes, all 6 | Pass | |
+| 5 | `get_revenue_total(filters={stores:[SH11], years:[2028]})` (plus `get_data_coverage` to resolve "Chicago") | Before: $269,100 (data `670c0b95`). After uploading the file with $1,000 added to one Chicago 2028 sale: $270,100 (data `5edd2917`). No code change. | Yes (9, then 8) | Pass | The model resolved "Chicago" to store ID SH11 on its own. |
 
 ## Safeguards that are tested automatically (`pytest`)
 - The dispatcher rejects unknown functions (for example `run_python`) and unexpected arguments, and logs the attempt.

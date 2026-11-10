@@ -211,6 +211,8 @@ def verify_numbers(text: str, tool_log: list, question: str = '') -> dict:
             continue
         if not dollar and not unit and '.' not in digits and v <= 12:
             continue          # small counts like "3 stores" or "top 5"
+        if not dollar and not unit and ',' not in raw and re.fullmatch(r'(19|20)\d{2}', digits):
+            continue          # a calendar year like 2027 is a date, not a claim
         decimals = len(digits.split('.')[1]) if '.' in digits else 0
         scale = _SCALE.get(unit, 1.0)
         value = v * scale
