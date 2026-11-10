@@ -19,7 +19,10 @@ The same five questions were then run against the **live language model** (Gemin
 
 Every answer has the same five sections: **Scope**, **Findings** (from tool results only), **Interpretation**, **Limitations**, and **Next steps**. Next steps says "No recommendation is supported by this data." for profit, closing, and causation questions, followed by the information management would need.
 
-> Attach screenshots of the tool-call log for Tests 1, 2 and 5 (open the "Tool-call log" expander under the answer).
+### Screenshots (tool-call logs)
+- Test 1, live model: [docs/screenshots/live-test-1.png](screenshots/live-test-1.png)
+- Test 2, live model, after the year fix (no false flags): [docs/screenshots/live-test-2.png](screenshots/live-test-2.png)
+- Free-tier quota reached: the app switched to the rules-based assistant on its own, said so, and still answered Test 5 correctly ($269,100): [docs/screenshots/quota-fallback.png](screenshots/quota-fallback.png)
 
 ## Live model (Gemini) results
 Run on the deployed app (https://dailydebrief.streamlit.app/) on November 9, 2026, model `gemini-3.5-flash`, original files (fingerprint `670c0b95`) unless noted.
